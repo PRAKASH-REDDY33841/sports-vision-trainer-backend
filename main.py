@@ -8,12 +8,24 @@ import random, datetime, os, shutil
 import smtplib
 from email.mime.text import MIMEText
 
-# ✅ NEW IMPORT (ADDED)
+# ✅ STATIC FILES
 from fastapi.staticfiles import StaticFiles
+
+# ✅ CORS IMPORT (ADDED)
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-# ✅ NEW LINE (ADDED)
+# ✅ CORS MIDDLEWARE (ADDED)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ✅ STATIC MOUNT
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 UPLOAD_DIR = "uploads"
@@ -197,7 +209,7 @@ def get_profile(email: str):
     user = cursor.fetchone()
 
     if user and user["profile_image"]:
-        user["profile_image"] = f"http://10.19.67.111:8000/{user['profile_image']}"
+        user["profile_image"] = f"http://10.117.86.111:8000/{user['profile_image']}"
 
     return user
 
@@ -231,3 +243,421 @@ async def save_profile(
     db.commit()
 
     return {"status": "success"}
+
+
+# ---------------- SAVE SESSION ----------------
+@app.post("/save_session.php")
+def save_session(req: SessionSaveRequest):
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS game_sessions (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            email VARCHAR(100),
+            game_type VARCHAR(50),
+            score INT,
+            avg_reaction BIGINT,
+            wrong INT,
+            timestamp BIGINT
+        )
+    """)
+
+    cursor.execute(
+        "INSERT INTO game_sessions (email, game_type, score, avg_reaction, wrong, timestamp) VALUES (%s, %s, %s, %s, %s, %s)",
+        (req.email, req.gameType, req.score, req.avgReaction, req.wrong, req.timestamp)
+    )
+    db.commit()
+
+    return {"status": "success"}
+
+
+# ---------------- GET SESSIONS ----------------
+@app.get("/get_sessions.php")
+def get_sessions(email: str):
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS game_sessions (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            email VARCHAR(100),
+            game_type VARCHAR(50),
+            score INT,
+            avg_reaction BIGINT,
+            wrong INT,
+            timestamp BIGINT
+        )
+    """)
+
+    cursor.execute(
+        "SELECT game_type as gameType, score, avg_reaction as avgReaction, wrong, timestamp FROM game_sessions WHERE email=%s ORDER BY timestamp ASC",
+        (email,)
+    )
+    rows = cursor.fetchall()
+    
+    sessions = []
+    if rows:
+        for row in rows:
+            sessions.append({
+                "gameType": row["gameType"],
+                "score": int(row["score"]),
+                "avgReaction": int(row["avgReaction"]),
+                "wrong": int(row["wrong"]),
+                "timestamp": int(row["timestamp"])
+            })
+
+    return {"status": "success", "sessions": sessions}
+
+# ---------------- DOCTOR REGISTER ----------------
+@app.post("/doctor_register.php")
+def doctor_register(req: DoctorRegisterRequest):
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS doctors (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            full_name VARCHAR(100),
+            medical_license VARCHAR(100),
+            hospital_name VARCHAR(255),
+            clinic_email VARCHAR(100) UNIQUE,
+            password VARCHAR(255),
+            reset_otp VARCHAR(10),
+            otp_expiry DATETIME
+        )
+    """)
+
+    if not req.full_name or not req.clinic_email or not req.password:
+        return {"status": "error", "message": "Missing fields"}
+
+    cursor.execute("SELECT id FROM doctors WHERE clinic_email=%s OR medical_license=%s", (req.clinic_email, req.medical_license))
+    if cursor.fetchone():
+        return {"status": "error", "message": "Email or Medical License already registered"}
+
+    hashed = hash_password(req.password)
+
+    cursor.execute(
+        "INSERT INTO doctors(full_name, medical_license, hospital_name, clinic_email, password) VALUES (%s,%s,%s,%s,%s)",
+        (req.full_name, req.medical_license, req.hospital_name, req.clinic_email, hashed)
+    )
+    db.commit()
+
+    return {"status": "success", "message": "Doctor registered successfully"}
+
+
+# ---------------- DOCTOR LOGIN ----------------
+@app.post("/doctor_login.php")
+def doctor_login(req: DoctorLoginRequest):
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    if not req.clinic_email or not req.password:
+        return {"status": "error", "message": "Missing credentials"}
+
+    try:
+        cursor.execute("SELECT full_name, password FROM doctors WHERE clinic_email=%s", (req.clinic_email,))
+        user = cursor.fetchone()
+    except Exception as e:
+        return {"status": "error", "message": f"Database error: {str(e)}"}
+
+    if not user:
+        return {"status": "error", "message": "Doctor not found"}
+
+    if verify_password(req.password, user["password"]):
+        return {"status": "success", "username": user["full_name"]}
+    else:
+        return {"status": "error", "message": "Wrong password"}
+
+# ---------------- DOCTOR SEND OTP ----------------
+@app.post("/doctor_send_otp.php")
+def doctor_send_otp(req: ForgotRequest):
+    db = get_db()
+    cursor = db.cursor()
+
+    if not req.email:
+        return {"status": "error", "msg": "Email required"}
+
+    # Add columns if they don't exist
+    try:
+        cursor.execute("ALTER TABLE doctors ADD COLUMN reset_otp VARCHAR(10), ADD COLUMN otp_expiry DATETIME")
+        db.commit()
+    except:
+        pass
+
+    otp = str(random.randint(100000, 999999))
+    expiry = datetime.datetime.now() + datetime.timedelta(minutes=10)
+
+    cursor.execute(
+        "UPDATE doctors SET reset_otp=%s, otp_expiry=%s WHERE clinic_email=%s",
+        (otp, expiry, req.email)
+    )
+    db.commit()
+
+    if cursor.rowcount == 0:
+        return {"status": "error", "msg": "Doctor email not found"}
+
+    if send_email_otp(req.email, otp):
+        return {"status": "success"}
+    else:
+        return {"status": "error", "msg": "Failed to send email"}
+
+# ---------------- DOCTOR VERIFY OTP ----------------
+@app.post("/doctor_verify_otp.php")
+def doctor_verify_otp(req: OtpVerifyRequest):
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    if not req.email or not req.otp:
+        return {"status": "error", "msg": "Missing email or otp"}
+
+    cursor.execute(
+        "SELECT reset_otp, otp_expiry FROM doctors WHERE clinic_email=%s",
+        (req.email,)
+    )
+    row = cursor.fetchone()
+
+    if not row:
+        return {"status": "error", "msg": "Doctor not found"}
+
+    if row["reset_otp"] != req.otp:
+        return {"status": "error", "msg": "Invalid OTP"}
+
+    if row["otp_expiry"] and row["otp_expiry"] < datetime.datetime.now():
+        return {"status": "error", "msg": "OTP expired"}
+
+    return {"status": "success"}
+
+# ---------------- DOCTOR RESET PASSWORD ----------------
+@app.post("/doctor_reset_password_final.php")
+def doctor_reset_password(req: ResetRequest):
+    db = get_db()
+    cursor = db.cursor()
+
+    if not req.email or not req.password:
+        return {"status": "error", "msg": "Missing data"}
+
+    hashed = hash_password(req.password)
+
+    cursor.execute(
+        "UPDATE doctors SET password=%s, reset_otp=NULL, otp_expiry=NULL WHERE clinic_email=%s",
+        (hashed, req.email)
+    )
+    db.commit()
+
+    return {"status": "success"}
+
+# ---------------- GET DOCTOR PROFILE ----------------
+@app.get("/get_doctor_profile.php")
+def get_doctor_profile(email: str):
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    # Ensure columns exist
+    try:
+        cursor.execute("ALTER TABLE doctors ADD COLUMN bio TEXT, ADD COLUMN profile_image VARCHAR(255)")
+        db.commit()
+    except:
+        pass
+
+    cursor.execute(
+        "SELECT full_name as username, bio, profile_image FROM doctors WHERE clinic_email=%s",
+        (email,)
+    )
+    doctor = cursor.fetchone()
+
+    if doctor and doctor["profile_image"]:
+        doctor["profile_image"] = f"http://10.117.86.111:8000/{doctor['profile_image']}"
+
+    return doctor
+
+
+# ---------------- SAVE DOCTOR PROFILE ----------------
+@app.post("/save_doctor_profile.php")
+async def save_doctor_profile(
+    email: str = Form(...),
+    name: str = Form(...),
+    bio: str = Form(...),
+    photo: UploadFile = File(None)
+):
+    db = get_db()
+    cursor = db.cursor()
+
+    image_path = None
+
+    if photo:
+        filename = f"doctor_{int(datetime.datetime.now().timestamp())}_{photo.filename}"
+        path = os.path.join(UPLOAD_DIR, filename)
+
+        with open(path, "wb") as buffer:
+            shutil.copyfileobj(photo.file, buffer)
+
+        image_path = f"uploads/{filename}"
+
+    if image_path:
+        cursor.execute(
+            "UPDATE doctors SET full_name=%s, bio=%s, profile_image=%s WHERE clinic_email=%s",
+            (name, bio, image_path, email)
+        )
+    else:
+        cursor.execute(
+            "UPDATE doctors SET full_name=%s, bio=%s WHERE clinic_email=%s",
+            (name, bio, email)
+        )
+    
+    db.commit()
+
+    return {"status": "success"}
+
+# ---------------- GET DOCTORS ----------------
+@app.get("/get_doctors.php")
+def get_doctors():
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("SELECT full_name, medical_license, hospital_name, clinic_email, profile_image FROM doctors")
+    doctors = cursor.fetchall()
+
+    for doctor in doctors:
+        if doctor.get("profile_image"):
+            doctor["profile_image"] = f"http://10.117.86.111:8000/{doctor['profile_image']}"
+        else:
+            doctor["profile_image"] = None
+
+    return {"status": "success", "doctors": doctors}
+
+# ---------------- APPOINTMENTS TABLE INITIALIZATION ----------------
+def init_appointments_table():
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS appointments (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            doctor_email VARCHAR(255),
+            athlete_email VARCHAR(255),
+            athlete_name VARCHAR(255),
+            athlete_phone VARCHAR(20),
+            date DATE,
+            time TIME,
+            status VARCHAR(50) DEFAULT 'PENDING'
+        )
+    """)
+    db.commit()
+
+init_appointments_table()
+
+# ---------------- BOOK APPOINTMENT ----------------
+@app.post("/book_appointment.php")
+def book_appointment(req: AppointmentRequest):
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute(
+        "INSERT INTO appointments (doctor_email, athlete_email, athlete_name, athlete_phone, date, time) VALUES (%s, %s, %s, %s, %s, %s)",
+        (req.doctor_email, req.athlete_email, req.athlete_name, req.athlete_phone, req.date, req.time)
+    )
+    db.commit()
+    return {"status": "success", "message": "Appointment requested"}
+
+# ---------------- GET DOCTOR APPOINTMENTS ----------------
+@app.get("/get_doctor_appointments.php")
+def get_doctor_appointments(email: str):
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT id, doctor_email, athlete_email, athlete_name, athlete_phone,
+               CAST(date AS CHAR) as date, CAST(time AS CHAR) as time, status 
+        FROM appointments WHERE doctor_email=%s AND status='PENDING'
+    """, (email,))
+    return {"status": "success", "appointments": cursor.fetchall()}
+
+# ---------------- GET DOCTOR HISTORY ----------------
+@app.get("/get_doctor_history.php")
+def get_door_history(email: str):
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT a.id, a.doctor_email, a.athlete_email, a.athlete_name, a.athlete_phone,
+               CAST(a.date AS CHAR) as date, CAST(a.time AS CHAR) as time, a.status,
+               CONCAT('http://10.117.86.111:8000/', u.profile_image) as profile_image
+        FROM appointments a
+        LEFT JOIN users u ON a.athlete_email = u.email
+        WHERE a.doctor_email=%s AND a.status IN ('ACCEPTED', 'REJECTED', 'CANCELLED')
+        ORDER BY a.id DESC
+    """, (email,))
+    return {"status": "success", "appointments": cursor.fetchall()}
+
+# ---------------- UPDATE APPOINTMENT STATUS ----------------
+@app.post("/update_appointment_status.php")
+def update_appointment_status(req: UpdateStatusRequest):
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("UPDATE appointments SET status=%s WHERE id=%s", (req.status, req.id))
+    db.commit()
+    return {"status": "success", "message": f"Appointment {req.status}"}
+
+# ---------------- GET ATHLETE NOTIFICATIONS ----------------
+@app.get("/get_athlete_notifications.php")
+def get_athlete_notifications(email: str):
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    # Get accepted appointments that haven't been "dismissed" (we'll just show all active accepted ones for now)
+    cursor.execute("SELECT * FROM appointments WHERE athlete_email=%s AND status IN ('ACCEPTED', 'REJECTED') ORDER BY id DESC LIMIT 1", (email,))
+    app = cursor.fetchone()
+    
+    if app:
+        if app['status'] == 'ACCEPTED':
+            return {
+                "status": "success", 
+                "id": app['id'],
+                "app_status": "ACCEPTED",
+                "message": f"doctor call to your mobile number at you booking time please be alert"
+            }
+        else:
+            return {
+                "status": "success",
+                "id": app['id'],
+                "app_status": "REJECTED",
+                "message": f"Your appointment request has been rejected by the doctor."
+            }
+    return {"status": "error", "message": "No new notifications"}
+
+# ---------------- GET ACCEPTED APPOINTMENTS ----------------
+@app.get("/get_accepted_appointments.php")
+def get_accepted_appointments(email: str):
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT a.id, a.doctor_email, a.athlete_email, a.athlete_name, a.athlete_phone,
+               CAST(a.date AS CHAR) as date, CAST(a.time AS CHAR) as time, a.status,
+               CONCAT('http://10.117.86.111:8000/', u.profile_image) as profile_image
+        FROM appointments a
+        LEFT JOIN users u ON a.athlete_email = u.email
+        WHERE a.doctor_email=%s AND a.status='ACCEPTED'
+        ORDER BY a.date ASC, a.time ASC
+    """, (email,))
+    return {"status": "success", "appointments": cursor.fetchall()}
+
+# ---------------- GET ATHLETE BOOKINGS ----------------
+@app.get("/get_athlete_bookings.php")
+def get_athlete_bookings(email: str):
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT a.id, a.doctor_email, a.athlete_email, a.athlete_name, a.athlete_phone,
+               CAST(a.date AS CHAR) as date, 
+               CAST(a.time AS CHAR) as time,
+               a.status, d.full_name as doctor_name 
+        FROM appointments a
+        LEFT JOIN doctors d ON a.doctor_email = d.clinic_email
+        WHERE a.athlete_email=%s 
+        ORDER BY a.id DESC
+    """, (email,))
+    return {"status": "success", "bookings": cursor.fetchall()}
+
+# ---------------- CANCEL APPOINTMENT ----------------
+@app.post("/cancel_appointment.php")
+def cancel_appointment(id: int):
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("UPDATE appointments SET status='CANCELLED' WHERE id=%s", (id,))
+    db.commit()
+    return {"status": "success", "message": "Appointment cancelled"}
