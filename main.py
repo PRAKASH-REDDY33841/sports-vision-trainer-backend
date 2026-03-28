@@ -16,6 +16,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
+# ✅ BASE URL (Update this if your IP or port changes)
+BASE_URL = "http://10.136.25.111:8141"
+
 # ✅ CORS MIDDLEWARE (ADDED)
 app.add_middleware(
     CORSMiddleware,
@@ -56,9 +59,30 @@ def send_email_otp(to_email, otp):
         return False
 
 
+# ---------------- USERS TABLE INITIALIZATION ----------------
+def init_users_table():
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            username VARCHAR(100),
+            email VARCHAR(100) UNIQUE,
+            password VARCHAR(255),
+            bio TEXT,
+            profile_image VARCHAR(255),
+            reset_otp VARCHAR(10),
+            otp_expiry DATETIME
+        )
+    """)
+    db.commit()
+
+init_users_table()
+
 # ---------------- REGISTER ----------------
-@app.post("/register.php")
+@app.post("/register")
 def register(req: RegisterRequest):
+    init_users_table()  # Ensure table exists
     db = get_db()
     cursor = db.cursor(dictionary=True)
 
@@ -90,7 +114,7 @@ def register(req: RegisterRequest):
 
 
 # ---------------- LOGIN ----------------
-@app.post("/login.php")
+@app.post("/login")
 def login(req: LoginRequest):
     db = get_db()
     cursor = db.cursor(dictionary=True)
@@ -126,7 +150,7 @@ def login(req: LoginRequest):
 
 
 # ---------------- SEND OTP ----------------
-@app.post("/send_otp.php")
+@app.post("/send_otp")
 def send_otp(req: ForgotRequest):
     db = get_db()
     cursor = db.cursor()
@@ -150,7 +174,7 @@ def send_otp(req: ForgotRequest):
 
 
 # ---------------- VERIFY OTP ----------------
-@app.post("/verify_otp.php")
+@app.post("/verify_otp")
 def verify_otp(req: OtpVerifyRequest):
     db = get_db()
     cursor = db.cursor(dictionary=True)
@@ -177,7 +201,7 @@ def verify_otp(req: OtpVerifyRequest):
 
 
 # ---------------- RESET PASSWORD ----------------
-@app.post("/reset_password_final.php")
+@app.post("/reset_password_final")
 def reset_password(req: ResetRequest):
     db = get_db()
     cursor = db.cursor()
@@ -197,7 +221,7 @@ def reset_password(req: ResetRequest):
 
 
 # ---------------- GET PROFILE ----------------
-@app.get("/get_profile.php")
+@app.get("/get_profile")
 def get_profile(email: str):
     db = get_db()
     cursor = db.cursor(dictionary=True)
@@ -209,13 +233,13 @@ def get_profile(email: str):
     user = cursor.fetchone()
 
     if user and user["profile_image"]:
-        user["profile_image"] = f"http://10.136.25.111:8000/{user['profile_image']}"
+        user["profile_image"] = f"{BASE_URL}/{user['profile_image']}"
 
     return user
 
 
 # ---------------- SAVE PROFILE ----------------
-@app.post("/save_profile.php")
+@app.post("/save_profile")
 async def save_profile(
     email: str = Form(...),
     name: str = Form(...),
@@ -246,7 +270,7 @@ async def save_profile(
 
 
 # ---------------- SAVE SESSION ----------------
-@app.post("/save_session.php")
+@app.post("/save_session")
 def save_session(req: SessionSaveRequest):
     db = get_db()
     cursor = db.cursor(dictionary=True)
@@ -273,7 +297,7 @@ def save_session(req: SessionSaveRequest):
 
 
 # ---------------- GET SESSIONS ----------------
-@app.get("/get_sessions.php")
+@app.get("/get_sessions")
 def get_sessions(email: str):
     db = get_db()
     cursor = db.cursor(dictionary=True)
@@ -310,7 +334,7 @@ def get_sessions(email: str):
     return {"status": "success", "sessions": sessions}
 
 # ---------------- DOCTOR REGISTER ----------------
-@app.post("/doctor_register.php")
+@app.post("/doctor_register")
 def doctor_register(req: DoctorRegisterRequest):
     db = get_db()
     cursor = db.cursor(dictionary=True)
@@ -347,7 +371,7 @@ def doctor_register(req: DoctorRegisterRequest):
 
 
 # ---------------- DOCTOR LOGIN ----------------
-@app.post("/doctor_login.php")
+@app.post("/doctor_login")
 def doctor_login(req: DoctorLoginRequest):
     db = get_db()
     cursor = db.cursor(dictionary=True)
@@ -370,7 +394,7 @@ def doctor_login(req: DoctorLoginRequest):
         return {"status": "error", "message": "Wrong password"}
 
 # ---------------- DOCTOR SEND OTP ----------------
-@app.post("/doctor_send_otp.php")
+@app.post("/doctor_send_otp")
 def doctor_send_otp(req: ForgotRequest):
     db = get_db()
     cursor = db.cursor()
@@ -403,7 +427,7 @@ def doctor_send_otp(req: ForgotRequest):
         return {"status": "error", "msg": "Failed to send email"}
 
 # ---------------- DOCTOR VERIFY OTP ----------------
-@app.post("/doctor_verify_otp.php")
+@app.post("/doctor_verify_otp")
 def doctor_verify_otp(req: OtpVerifyRequest):
     db = get_db()
     cursor = db.cursor(dictionary=True)
@@ -429,7 +453,7 @@ def doctor_verify_otp(req: OtpVerifyRequest):
     return {"status": "success"}
 
 # ---------------- DOCTOR RESET PASSWORD ----------------
-@app.post("/doctor_reset_password_final.php")
+@app.post("/doctor_reset_password_final")
 def doctor_reset_password(req: ResetRequest):
     db = get_db()
     cursor = db.cursor()
@@ -448,7 +472,7 @@ def doctor_reset_password(req: ResetRequest):
     return {"status": "success"}
 
 # ---------------- GET DOCTOR PROFILE ----------------
-@app.get("/get_doctor_profile.php")
+@app.get("/get_doctor_profile")
 def get_doctor_profile(email: str):
     db = get_db()
     cursor = db.cursor(dictionary=True)
@@ -467,13 +491,13 @@ def get_doctor_profile(email: str):
     doctor = cursor.fetchone()
 
     if doctor and doctor["profile_image"]:
-        doctor["profile_image"] = f"http://10.136.25.111:8000/{doctor['profile_image']}"
+        doctor["profile_image"] = f"{BASE_URL}/{doctor['profile_image']}"
 
     return doctor
 
 
 # ---------------- SAVE DOCTOR PROFILE ----------------
-@app.post("/save_doctor_profile.php")
+@app.post("/save_doctor_profile")
 async def save_doctor_profile(
     email: str = Form(...),
     name: str = Form(...),
@@ -510,7 +534,7 @@ async def save_doctor_profile(
     return {"status": "success"}
 
 # ---------------- GET DOCTORS ----------------
-@app.get("/get_doctors.php")
+@app.get("/get_doctors")
 def get_doctors():
     db = get_db()
     cursor = db.cursor(dictionary=True)
@@ -519,7 +543,7 @@ def get_doctors():
 
     for doctor in doctors:
         if doctor.get("profile_image"):
-            doctor["profile_image"] = f"http://10.136.25.111:8000/{doctor['profile_image']}"
+            doctor["profile_image"] = f"{BASE_URL}/{doctor['profile_image']}"
         else:
             doctor["profile_image"] = None
 
@@ -544,9 +568,10 @@ def init_appointments_table():
     db.commit()
 
 init_appointments_table()
+init_users_table()
 
 # ---------------- BOOK APPOINTMENT ----------------
-@app.post("/book_appointment.php")
+@app.post("/book_appointment")
 def book_appointment(req: AppointmentRequest):
     db = get_db()
     cursor = db.cursor()
@@ -558,7 +583,7 @@ def book_appointment(req: AppointmentRequest):
     return {"status": "success", "message": "Appointment requested"}
 
 # ---------------- GET DOCTOR APPOINTMENTS ----------------
-@app.get("/get_doctor_appointments.php")
+@app.get("/get_doctor_appointments")
 def get_doctor_appointments(email: str):
     db = get_db()
     cursor = db.cursor(dictionary=True)
@@ -570,14 +595,14 @@ def get_doctor_appointments(email: str):
     return {"status": "success", "appointments": cursor.fetchall()}
 
 # ---------------- GET DOCTOR HISTORY ----------------
-@app.get("/get_doctor_history.php")
+@app.get("/get_doctor_history")
 def get_door_history(email: str):
     db = get_db()
     cursor = db.cursor(dictionary=True)
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT a.id, a.doctor_email, a.athlete_email, a.athlete_name, a.athlete_phone,
                CAST(a.date AS CHAR) as date, CAST(a.time AS CHAR) as time, a.status,
-               CONCAT('http://10.136.25.111:8000/', u.profile_image) as profile_image
+               CONCAT('{BASE_URL}/', u.profile_image) as profile_image
         FROM appointments a
         LEFT JOIN users u ON a.athlete_email = u.email
         WHERE a.doctor_email=%s AND a.status IN ('ACCEPTED', 'REJECTED', 'CANCELLED')
@@ -586,7 +611,7 @@ def get_door_history(email: str):
     return {"status": "success", "appointments": cursor.fetchall()}
 
 # ---------------- UPDATE APPOINTMENT STATUS ----------------
-@app.post("/update_appointment_status.php")
+@app.post("/update_appointment_status")
 def update_appointment_status(req: UpdateStatusRequest):
     db = get_db()
     cursor = db.cursor()
@@ -595,7 +620,7 @@ def update_appointment_status(req: UpdateStatusRequest):
     return {"status": "success", "message": f"Appointment {req.status}"}
 
 # ---------------- GET ATHLETE NOTIFICATIONS ----------------
-@app.get("/get_athlete_notifications.php")
+@app.get("/get_athlete_notifications")
 def get_athlete_notifications(email: str):
     db = get_db()
     cursor = db.cursor(dictionary=True)
@@ -621,14 +646,14 @@ def get_athlete_notifications(email: str):
     return {"status": "error", "message": "No new notifications"}
 
 # ---------------- GET ACCEPTED APPOINTMENTS ----------------
-@app.get("/get_accepted_appointments.php")
+@app.get("/get_accepted_appointments")
 def get_accepted_appointments(email: str):
     db = get_db()
     cursor = db.cursor(dictionary=True)
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT a.id, a.doctor_email, a.athlete_email, a.athlete_name, a.athlete_phone,
                CAST(a.date AS CHAR) as date, CAST(a.time AS CHAR) as time, a.status,
-               CONCAT('http://10.136.25.111:8000/', u.profile_image) as profile_image
+               CONCAT('{BASE_URL}/', u.profile_image) as profile_image
         FROM appointments a
         LEFT JOIN users u ON a.athlete_email = u.email
         WHERE a.doctor_email=%s AND a.status='ACCEPTED'
@@ -637,7 +662,7 @@ def get_accepted_appointments(email: str):
     return {"status": "success", "appointments": cursor.fetchall()}
 
 # ---------------- GET ATHLETE BOOKINGS ----------------
-@app.get("/get_athlete_bookings.php")
+@app.get("/get_athlete_bookings")
 def get_athlete_bookings(email: str):
     db = get_db()
     cursor = db.cursor(dictionary=True)
@@ -654,7 +679,7 @@ def get_athlete_bookings(email: str):
     return {"status": "success", "bookings": cursor.fetchall()}
 
 # ---------------- CANCEL APPOINTMENT ----------------
-@app.post("/cancel_appointment.php")
+@app.post("/cancel_appointment")
 def cancel_appointment(id: int):
     db = get_db()
     cursor = db.cursor()
