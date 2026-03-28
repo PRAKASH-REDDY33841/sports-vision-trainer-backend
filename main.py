@@ -209,7 +209,7 @@ def get_profile(email: str):
     user = cursor.fetchone()
 
     if user and user["profile_image"]:
-        user["profile_image"] = f"http://10.118.245.111:8000/{user['profile_image']}"
+        user["profile_image"] = f"http://10.136.25.111:8000/{user['profile_image']}"
 
     return user
 
@@ -467,7 +467,7 @@ def get_doctor_profile(email: str):
     doctor = cursor.fetchone()
 
     if doctor and doctor["profile_image"]:
-        doctor["profile_image"] = f"http://10.118.245.111:8000/{doctor['profile_image']}"
+        doctor["profile_image"] = f"http://10.136.25.111:8000/{doctor['profile_image']}"
 
     return doctor
 
@@ -519,7 +519,7 @@ def get_doctors():
 
     for doctor in doctors:
         if doctor.get("profile_image"):
-            doctor["profile_image"] = f"http://10.118.245.111:8000/{doctor['profile_image']}"
+            doctor["profile_image"] = f"http://10.136.25.111:8000/{doctor['profile_image']}"
         else:
             doctor["profile_image"] = None
 
@@ -577,7 +577,7 @@ def get_door_history(email: str):
     cursor.execute("""
         SELECT a.id, a.doctor_email, a.athlete_email, a.athlete_name, a.athlete_phone,
                CAST(a.date AS CHAR) as date, CAST(a.time AS CHAR) as time, a.status,
-               CONCAT('http://10.118.245.111:8000/', u.profile_image) as profile_image
+               CONCAT('http://10.136.25.111:8000/', u.profile_image) as profile_image
         FROM appointments a
         LEFT JOIN users u ON a.athlete_email = u.email
         WHERE a.doctor_email=%s AND a.status IN ('ACCEPTED', 'REJECTED', 'CANCELLED')
@@ -628,7 +628,7 @@ def get_accepted_appointments(email: str):
     cursor.execute("""
         SELECT a.id, a.doctor_email, a.athlete_email, a.athlete_name, a.athlete_phone,
                CAST(a.date AS CHAR) as date, CAST(a.time AS CHAR) as time, a.status,
-               CONCAT('http://10.118.245.111:8000/', u.profile_image) as profile_image
+               CONCAT('http://10.136.25.111:8000/', u.profile_image) as profile_image
         FROM appointments a
         LEFT JOIN users u ON a.athlete_email = u.email
         WHERE a.doctor_email=%s AND a.status='ACCEPTED'
