@@ -77,40 +77,56 @@ def init_users_table():
     """)
     db.commit()
 
-init_users_table()
+# ---------------- DATABASE DIAGNOSTICS ----------------
+@app.get("/test_db")
+def test_db():
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute("SELECT 1")
+        return {"status": "success", "message": "Database connected successfully"}
+    except Exception as e:
+        return {"status": "error", "message": f"Connection Failed: {str(e)}"}
 
-# ---------------- REGISTER ----------------
+# ---------------- STARTUP INITIALIZATION ----------------
+@app.on_event("startup")
+def on_startup():
+    init_users_table()
+    init_appointments_table()
+
 @app.post("/register")
 def register(req: RegisterRequest):
-    init_users_table()  # Ensure table exists
-    db = get_db()
-    cursor = db.cursor(dictionary=True)
+    try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
 
-    if req.username == "" or req.email == "" or req.password == "":
+        if req.username == "" or req.email == "" or req.password == "":
+            return {
+                "status": "error",
+                "message": "Missing fields"
+            }
+
+        cursor.execute("SELECT id FROM users WHERE email=%s", (req.email,))
+        if cursor.fetchone():
+            return {
+                "status": "error",
+                "message": "User already registered"
+            }
+
+        hashed = hash_password(req.password)
+
+        cursor.execute(
+            "INSERT INTO users(username,email,password) VALUES (%s,%s,%s)",
+            (req.username, req.email, hashed)
+        )
+        db.commit()
+
         return {
-            "status": "error",
-            "message": "Missing fields"
+            "status": "success",
+            "message": "Registered successfully"
         }
-
-    cursor.execute("SELECT id FROM users WHERE email=%s", (req.email,))
-    if cursor.fetchone():
-        return {
-            "status": "error",
-            "message": "User already registered"
-        }
-
-    hashed = hash_password(req.password)
-
-    cursor.execute(
-        "INSERT INTO users(username,email,password) VALUES (%s,%s,%s)",
-        (req.username, req.email, hashed)
-    )
-    db.commit()
-
-    return {
-        "status": "success",
-        "message": "Registered successfully"
-    }
+    except Exception as e:
+        return {"status": "error", "message": f"Registration Error: {str(e)}"}
 
 
 # ---------------- LOGIN ----------------
@@ -336,38 +352,41 @@ def get_sessions(email: str):
 # ---------------- DOCTOR REGISTER ----------------
 @app.post("/doctor_register")
 def doctor_register(req: DoctorRegisterRequest):
-    db = get_db()
-    cursor = db.cursor(dictionary=True)
+    try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS doctors (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            full_name VARCHAR(100),
-            medical_license VARCHAR(100),
-            hospital_name VARCHAR(255),
-            clinic_email VARCHAR(100) UNIQUE,
-            password VARCHAR(255),
-            reset_otp VARCHAR(10),
-            otp_expiry DATETIME
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS doctors (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                full_name VARCHAR(100),
+                medical_license VARCHAR(100),
+                hospital_name VARCHAR(255),
+                clinic_email VARCHAR(100) UNIQUE,
+                password VARCHAR(255),
+                reset_otp VARCHAR(10),
+                otp_expiry DATETIME
+            )
+        """)
+
+        if not req.full_name or not req.clinic_email or not req.password:
+            return {"status": "error", "message": "Missing fields"}
+
+        cursor.execute("SELECT id FROM doctors WHERE clinic_email=%s OR medical_license=%s", (req.clinic_email, req.medical_license))
+        if cursor.fetchone():
+            return {"status": "error", "message": "Email or Medical License already registered"}
+
+        hashed = hash_password(req.password)
+
+        cursor.execute(
+            "INSERT INTO doctors(full_name, medical_license, hospital_name, clinic_email, password) VALUES (%s,%s,%s,%s,%s)",
+            (req.full_name, req.medical_license, req.hospital_name, req.clinic_email, hashed)
         )
-    """)
+        db.commit()
 
-    if not req.full_name or not req.clinic_email or not req.password:
-        return {"status": "error", "message": "Missing fields"}
-
-    cursor.execute("SELECT id FROM doctors WHERE clinic_email=%s OR medical_license=%s", (req.clinic_email, req.medical_license))
-    if cursor.fetchone():
-        return {"status": "error", "message": "Email or Medical License already registered"}
-
-    hashed = hash_password(req.password)
-
-    cursor.execute(
-        "INSERT INTO doctors(full_name, medical_license, hospital_name, clinic_email, password) VALUES (%s,%s,%s,%s,%s)",
-        (req.full_name, req.medical_license, req.hospital_name, req.clinic_email, hashed)
-    )
-    db.commit()
-
-    return {"status": "success", "message": "Doctor registered successfully"}
+        return {"status": "success", "message": "Doctor registered successfully"}
+    except Exception as e:
+        return {"status": "error", "message": f"Doctor Registration Error: {str(e)}"}
 
 
 # ---------------- DOCTOR LOGIN ----------------
@@ -566,9 +585,6 @@ def init_appointments_table():
         )
     """)
     db.commit()
-
-init_appointments_table()
-init_users_table()
 
 # ---------------- BOOK APPOINTMENT ----------------
 @app.post("/book_appointment")
