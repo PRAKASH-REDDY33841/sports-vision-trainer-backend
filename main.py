@@ -111,7 +111,10 @@ def send_email_otp(to_email, otp):
     except smtplib.SMTPAuthenticationError:
         return False, "SMTP Authentication Failed. If using Gmail, make sure to use a 16-character Google 'App Password', NOT your regular login password."
     except Exception as e:
-        return False, f"SMTP Error: {str(e)}"
+        error_msg = str(e)
+        if "101" in error_msg or "unreachable" in error_msg.lower() or "timeout" in error_msg.lower() or "connection" in error_msg.lower():
+            return False, f"SMTP Error: {error_msg}. (Note: Standard SMTP ports are blocked on Render Free Tier. Please register on Resend.com and add 'RESEND_API_KEY' in Render environment variables to send emails via HTTP API for free)."
+        return False, f"SMTP Error: {error_msg}"
 
 
 from psycopg2 import extras
