@@ -3,6 +3,10 @@ from schemas import *
 from database import get_db
 from auth import hash_password, verify_password
 import random, datetime, os, shutil
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # ✅ EMAIL IMPORTS
 import smtplib
@@ -16,13 +20,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-# ✅ BASE URL (Update this if your IP or port changes)
-BASE_URL = "http://10.136.25.111:8141"
+# ✅ BASE URL (Loaded from environment)
+BASE_URL = os.getenv("BASE_URL", "http://localhost:8141")
 
-# ✅ CORS MIDDLEWARE (ADDED)
+# ✅ CORS MIDDLEWARE
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -36,8 +41,14 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # ---------------- EMAIL FUNCTION ----------------
 def send_email_otp(to_email, otp):
-    sender_email = "prakash33841@gmail.com"
-    sender_password = "tbhazosrngtcefyd"
+    sender_email = os.getenv("SMTP_SENDER_EMAIL")
+    sender_password = os.getenv("SMTP_SENDER_PASSWORD")
+    smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+
+    if not sender_email or not sender_password:
+        print("Email Error: SMTP credentials not configured in environment")
+        return False
 
     subject = "Password Reset OTP"
     body = f"Your OTP is: {otp}"
@@ -48,7 +59,7 @@ def send_email_otp(to_email, otp):
     msg["To"] = to_email
 
     try:
-        server = smtplib.SMTP("smtp.gmail.com", 587)
+        server = smtplib.SMTP(smtp_server, smtp_port)
         server.starttls()
         server.login(sender_email, sender_password)
         server.sendmail(sender_email, to_email, msg.as_string())
@@ -265,7 +276,7 @@ async def save_profile(
     db = get_db()
     cursor = db.cursor()
 
-    image_path = ""
+    image_path = None
 
     if photo:
         filename = f"{int(datetime.datetime.now().timestamp())}_{photo.filename}"
@@ -276,10 +287,17 @@ async def save_profile(
 
         image_path = f"uploads/{filename}"
 
-    cursor.execute(
-        "UPDATE users SET username=%s, bio=%s, profile_image=%s WHERE email=%s",
-        (name, bio, image_path, email)
-    )
+    if image_path:
+        cursor.execute(
+            "UPDATE users SET username=%s, bio=%s, profile_image=%s WHERE email=%s",
+            (name, bio, image_path, email)
+        )
+    else:
+        cursor.execute(
+            "UPDATE users SET username=%s, bio=%s WHERE email=%s",
+            (name, bio, email)
+        )
+    
     db.commit()
 
     return {"status": "success"}
@@ -365,7 +383,9 @@ def doctor_register(req: DoctorRegisterRequest):
                 clinic_email VARCHAR(100) UNIQUE,
                 password VARCHAR(255),
                 reset_otp VARCHAR(10),
-                otp_expiry DATETIME
+                otp_expiry DATETIME,
+                bio TEXT,
+                profile_image VARCHAR(255)
             )
         """)
 
@@ -420,13 +440,6 @@ def doctor_send_otp(req: ForgotRequest):
 
     if not req.email:
         return {"status": "error", "msg": "Email required"}
-
-    # Add columns if they don't exist
-    try:
-        cursor.execute("ALTER TABLE doctors ADD COLUMN reset_otp VARCHAR(10), ADD COLUMN otp_expiry DATETIME")
-        db.commit()
-    except:
-        pass
 
     otp = str(random.randint(100000, 999999))
     expiry = datetime.datetime.now() + datetime.timedelta(minutes=10)
@@ -495,13 +508,6 @@ def doctor_reset_password(req: ResetRequest):
 def get_doctor_profile(email: str):
     db = get_db()
     cursor = db.cursor(dictionary=True)
-
-    # Ensure columns exist
-    try:
-        cursor.execute("ALTER TABLE doctors ADD COLUMN bio TEXT, ADD COLUMN profile_image VARCHAR(255)")
-        db.commit()
-    except:
-        pass
 
     cursor.execute(
         "SELECT full_name as username, bio, profile_image FROM doctors WHERE clinic_email=%s",

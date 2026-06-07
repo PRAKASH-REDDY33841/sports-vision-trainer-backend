@@ -1,0 +1,7 @@
+.env
+__pycache__/
+*.pyc
+uploads/
+diff.txt
+diff_output.txt
+verify_env.py
