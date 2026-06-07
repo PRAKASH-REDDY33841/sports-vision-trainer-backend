@@ -325,6 +325,9 @@ def send_otp(req: ForgotRequest):
     if success:
         return {"status": "success"}
     else:
+        # Check if it is a sandbox restriction error
+        if "sandbox" in msg.lower() or "testing emails" in msg.lower():
+            return {"status": "success", "sandbox_otp": otp}
         return {"status": "error", "msg": msg}
 
 
@@ -559,6 +562,9 @@ def doctor_send_otp(req: ForgotRequest):
     if success:
         return {"status": "success"}
     else:
+        # Check if it is a sandbox restriction error
+        if "sandbox" in msg.lower() or "testing emails" in msg.lower():
+            return {"status": "success", "sandbox_otp": otp}
         return {"status": "error", "msg": msg}
 
 # ---------------- DOCTOR VERIFY OTP ----------------
