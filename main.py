@@ -47,8 +47,7 @@ def send_email_otp(to_email, otp):
     smtp_port = int(os.getenv("SMTP_PORT", "587"))
 
     if not sender_email or not sender_password:
-        print("Email Error: SMTP credentials not configured in environment")
-        return False
+        return False, "SMTP credentials (SMTP_SENDER_EMAIL and SMTP_SENDER_PASSWORD) are not configured in backend Environment Variables."
 
     subject = "Password Reset OTP"
     body = f"Your OTP is: {otp}"
@@ -59,15 +58,16 @@ def send_email_otp(to_email, otp):
     msg["To"] = to_email
 
     try:
-        server = smtplib.SMTP(smtp_server, smtp_port)
+        server = smtplib.SMTP(smtp_server, smtp_port, timeout=10)
         server.starttls()
         server.login(sender_email, sender_password)
         server.sendmail(sender_email, to_email, msg.as_string())
         server.quit()
-        return True
+        return True, "Success"
+    except smtplib.SMTPAuthenticationError:
+        return False, "SMTP Authentication Failed. If using Gmail, make sure to use a 16-character Google 'App Password', NOT your regular login password."
     except Exception as e:
-        print("Email Error:", e)
-        return False
+        return False, f"SMTP Error: {str(e)}"
 
 
 from psycopg2 import extras
@@ -230,6 +230,10 @@ def send_otp(req: ForgotRequest):
     if not req.email:
         return {"status": "error", "msg": "Email required"}
 
+    cursor.execute("SELECT id FROM users WHERE email=%s", (req.email,))
+    if not cursor.fetchone():
+        return {"status": "error", "msg": "Email not found"}
+
     otp = str(random.randint(100000, 999999))
     expiry = datetime.datetime.now() + datetime.timedelta(minutes=10)
 
@@ -239,10 +243,11 @@ def send_otp(req: ForgotRequest):
     )
     db.commit()
 
-    if send_email_otp(req.email, otp):
+    success, msg = send_email_otp(req.email, otp)
+    if success:
         return {"status": "success"}
     else:
-        return {"status": "error", "msg": "Failed to send email"}
+        return {"status": "error", "msg": msg}
 
 
 # ---------------- VERIFY OTP ----------------
@@ -447,6 +452,10 @@ def doctor_send_otp(req: ForgotRequest):
     if not req.email:
         return {"status": "error", "msg": "Email required"}
 
+    cursor.execute("SELECT id FROM doctors WHERE clinic_email=%s", (req.email,))
+    if not cursor.fetchone():
+        return {"status": "error", "msg": "Doctor email not found"}
+
     otp = str(random.randint(100000, 999999))
     expiry = datetime.datetime.now() + datetime.timedelta(minutes=10)
 
@@ -456,13 +465,11 @@ def doctor_send_otp(req: ForgotRequest):
     )
     db.commit()
 
-    if cursor.rowcount == 0:
-        return {"status": "error", "msg": "Doctor email not found"}
-
-    if send_email_otp(req.email, otp):
+    success, msg = send_email_otp(req.email, otp)
+    if success:
         return {"status": "success"}
     else:
-        return {"status": "error", "msg": "Failed to send email"}
+        return {"status": "error", "msg": msg}
 
 # ---------------- DOCTOR VERIFY OTP ----------------
 @app.post("/doctor_verify_otp")
