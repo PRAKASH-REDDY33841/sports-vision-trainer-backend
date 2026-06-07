@@ -70,46 +70,91 @@ def send_email_otp(to_email, otp):
         return False
 
 
+from psycopg2 import extras
+
 # ---------------- USERS TABLE INITIALIZATION ----------------
 def init_users_table():
     db = get_db()
     cursor = db.cursor()
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
-            id INT AUTO_INCREMENT PRIMARY KEY,
+            id SERIAL PRIMARY KEY,
             username VARCHAR(100),
             email VARCHAR(100) UNIQUE,
             password VARCHAR(255),
             bio TEXT,
             profile_image VARCHAR(255),
             reset_otp VARCHAR(10),
-            otp_expiry DATETIME
+            otp_expiry TIMESTAMP
         )
     """)
     db.commit()
 
-# ---------------- DATABASE DIAGNOSTICS ----------------
-@app.get("/test_db")
-def test_db():
-    try:
-        db = get_db()
-        cursor = db.cursor()
-        cursor.execute("SELECT 1")
-        return {"status": "success", "message": "Database connected successfully"}
-    except Exception as e:
-        return {"status": "error", "message": f"Connection Failed: {str(e)}"}
+def init_game_sessions_table():
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS game_sessions (
+            id SERIAL PRIMARY KEY,
+            email VARCHAR(100),
+            game_type VARCHAR(50),
+            score INT,
+            avg_reaction BIGINT,
+            wrong INT,
+            timestamp BIGINT
+        )
+    """)
+    db.commit()
+
+def init_doctors_table():
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS doctors (
+            id SERIAL PRIMARY KEY,
+            full_name VARCHAR(100),
+            medical_license VARCHAR(100),
+            hospital_name VARCHAR(255),
+            clinic_email VARCHAR(100) UNIQUE,
+            password VARCHAR(255),
+            reset_otp VARCHAR(10),
+            otp_expiry TIMESTAMP,
+            bio TEXT,
+            profile_image VARCHAR(255)
+        )
+    """)
+    db.commit()
+
+def init_appointments_table():
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS appointments (
+            id SERIAL PRIMARY KEY,
+            doctor_email VARCHAR(255),
+            athlete_email VARCHAR(255),
+            athlete_name VARCHAR(255),
+            athlete_phone VARCHAR(20),
+            date DATE,
+            time TIME,
+            status VARCHAR(50) DEFAULT 'PENDING'
+        )
+    """)
+    db.commit()
 
 # ---------------- STARTUP INITIALIZATION ----------------
 @app.on_event("startup")
 def on_startup():
     init_users_table()
+    init_game_sessions_table()
+    init_doctors_table()
     init_appointments_table()
 
 @app.post("/register")
 def register(req: RegisterRequest):
     try:
         db = get_db()
-        cursor = db.cursor(dictionary=True)
+    cursor = db.cursor(cursor_factory=extras.RealDictCursor)
 
         if req.username == "" or req.email == "" or req.password == "":
             return {
@@ -144,7 +189,7 @@ def register(req: RegisterRequest):
 @app.post("/login")
 def login(req: LoginRequest):
     db = get_db()
-    cursor = db.cursor(dictionary=True)
+    cursor = db.cursor(cursor_factory=extras.RealDictCursor)
 
     if req.email == "" or req.password == "":
         return {
@@ -204,7 +249,7 @@ def send_otp(req: ForgotRequest):
 @app.post("/verify_otp")
 def verify_otp(req: OtpVerifyRequest):
     db = get_db()
-    cursor = db.cursor(dictionary=True)
+    cursor = db.cursor(cursor_factory=extras.RealDictCursor)
 
     if not req.email or not req.otp:
         return {"status": "error", "msg": "Missing email or otp"}
@@ -251,7 +296,7 @@ def reset_password(req: ResetRequest):
 @app.get("/get_profile")
 def get_profile(email: str):
     db = get_db()
-    cursor = db.cursor(dictionary=True)
+    cursor = db.cursor(cursor_factory=extras.RealDictCursor)
 
     cursor.execute(
         "SELECT username,bio,profile_image FROM users WHERE email=%s",
@@ -307,19 +352,7 @@ async def save_profile(
 @app.post("/save_session")
 def save_session(req: SessionSaveRequest):
     db = get_db()
-    cursor = db.cursor(dictionary=True)
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS game_sessions (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            email VARCHAR(100),
-            game_type VARCHAR(50),
-            score INT,
-            avg_reaction BIGINT,
-            wrong INT,
-            timestamp BIGINT
-        )
-    """)
+    cursor = db.cursor(cursor_factory=extras.RealDictCursor)
 
     cursor.execute(
         "INSERT INTO game_sessions (email, game_type, score, avg_reaction, wrong, timestamp) VALUES (%s, %s, %s, %s, %s, %s)",
@@ -334,19 +367,7 @@ def save_session(req: SessionSaveRequest):
 @app.get("/get_sessions")
 def get_sessions(email: str):
     db = get_db()
-    cursor = db.cursor(dictionary=True)
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS game_sessions (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            email VARCHAR(100),
-            game_type VARCHAR(50),
-            score INT,
-            avg_reaction BIGINT,
-            wrong INT,
-            timestamp BIGINT
-        )
-    """)
+    cursor = db.cursor(cursor_factory=extras.RealDictCursor)
 
     cursor.execute(
         "SELECT game_type as gameType, score, avg_reaction as avgReaction, wrong, timestamp FROM game_sessions WHERE email=%s ORDER BY timestamp ASC",
@@ -372,22 +393,7 @@ def get_sessions(email: str):
 def doctor_register(req: DoctorRegisterRequest):
     try:
         db = get_db()
-        cursor = db.cursor(dictionary=True)
-
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS doctors (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                full_name VARCHAR(100),
-                medical_license VARCHAR(100),
-                hospital_name VARCHAR(255),
-                clinic_email VARCHAR(100) UNIQUE,
-                password VARCHAR(255),
-                reset_otp VARCHAR(10),
-                otp_expiry DATETIME,
-                bio TEXT,
-                profile_image VARCHAR(255)
-            )
-        """)
+    cursor = db.cursor(cursor_factory=extras.RealDictCursor)
 
         if not req.full_name or not req.clinic_email or not req.password:
             return {"status": "error", "message": "Missing fields"}
@@ -413,7 +419,7 @@ def doctor_register(req: DoctorRegisterRequest):
 @app.post("/doctor_login")
 def doctor_login(req: DoctorLoginRequest):
     db = get_db()
-    cursor = db.cursor(dictionary=True)
+    cursor = db.cursor(cursor_factory=extras.RealDictCursor)
 
     if not req.clinic_email or not req.password:
         return {"status": "error", "message": "Missing credentials"}
@@ -462,7 +468,7 @@ def doctor_send_otp(req: ForgotRequest):
 @app.post("/doctor_verify_otp")
 def doctor_verify_otp(req: OtpVerifyRequest):
     db = get_db()
-    cursor = db.cursor(dictionary=True)
+    cursor = db.cursor(cursor_factory=extras.RealDictCursor)
 
     if not req.email or not req.otp:
         return {"status": "error", "msg": "Missing email or otp"}
@@ -507,7 +513,7 @@ def doctor_reset_password(req: ResetRequest):
 @app.get("/get_doctor_profile")
 def get_doctor_profile(email: str):
     db = get_db()
-    cursor = db.cursor(dictionary=True)
+    cursor = db.cursor(cursor_factory=extras.RealDictCursor)
 
     cursor.execute(
         "SELECT full_name as username, bio, profile_image FROM doctors WHERE clinic_email=%s",
@@ -562,7 +568,7 @@ async def save_doctor_profile(
 @app.get("/get_doctors")
 def get_doctors():
     db = get_db()
-    cursor = db.cursor(dictionary=True)
+    cursor = db.cursor(cursor_factory=extras.RealDictCursor)
     cursor.execute("SELECT full_name, medical_license, hospital_name, clinic_email, profile_image FROM doctors")
     doctors = cursor.fetchall()
 
@@ -575,22 +581,8 @@ def get_doctors():
     return {"status": "success", "doctors": doctors}
 
 # ---------------- APPOINTMENTS TABLE INITIALIZATION ----------------
-def init_appointments_table():
     db = get_db()
     cursor = db.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS appointments (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            doctor_email VARCHAR(255),
-            athlete_email VARCHAR(255),
-            athlete_name VARCHAR(255),
-            athlete_phone VARCHAR(20),
-            date DATE,
-            time TIME,
-            status VARCHAR(50) DEFAULT 'PENDING'
-        )
-    """)
-    db.commit()
 
 # ---------------- BOOK APPOINTMENT ----------------
 @app.post("/book_appointment")
@@ -608,7 +600,7 @@ def book_appointment(req: AppointmentRequest):
 @app.get("/get_doctor_appointments")
 def get_doctor_appointments(email: str):
     db = get_db()
-    cursor = db.cursor(dictionary=True)
+    cursor = db.cursor(cursor_factory=extras.RealDictCursor)
     cursor.execute("""
         SELECT id, doctor_email, athlete_email, athlete_name, athlete_phone,
                CAST(date AS CHAR) as date, CAST(time AS CHAR) as time, status 
@@ -620,7 +612,7 @@ def get_doctor_appointments(email: str):
 @app.get("/get_doctor_history")
 def get_door_history(email: str):
     db = get_db()
-    cursor = db.cursor(dictionary=True)
+    cursor = db.cursor(cursor_factory=extras.RealDictCursor)
     cursor.execute(f"""
         SELECT a.id, a.doctor_email, a.athlete_email, a.athlete_name, a.athlete_phone,
                CAST(a.date AS CHAR) as date, CAST(a.time AS CHAR) as time, a.status,
@@ -645,7 +637,7 @@ def update_appointment_status(req: UpdateStatusRequest):
 @app.get("/get_athlete_notifications")
 def get_athlete_notifications(email: str):
     db = get_db()
-    cursor = db.cursor(dictionary=True)
+    cursor = db.cursor(cursor_factory=extras.RealDictCursor)
     # Get accepted appointments that haven't been "dismissed" (we'll just show all active accepted ones for now)
     cursor.execute("SELECT * FROM appointments WHERE athlete_email=%s AND status IN ('ACCEPTED', 'REJECTED') ORDER BY id DESC LIMIT 1", (email,))
     app = cursor.fetchone()
@@ -671,7 +663,7 @@ def get_athlete_notifications(email: str):
 @app.get("/get_accepted_appointments")
 def get_accepted_appointments(email: str):
     db = get_db()
-    cursor = db.cursor(dictionary=True)
+    cursor = db.cursor(cursor_factory=extras.RealDictCursor)
     cursor.execute(f"""
         SELECT a.id, a.doctor_email, a.athlete_email, a.athlete_name, a.athlete_phone,
                CAST(a.date AS CHAR) as date, CAST(a.time AS CHAR) as time, a.status,
@@ -687,7 +679,7 @@ def get_accepted_appointments(email: str):
 @app.get("/get_athlete_bookings")
 def get_athlete_bookings(email: str):
     db = get_db()
-    cursor = db.cursor(dictionary=True)
+    cursor = db.cursor(cursor_factory=extras.RealDictCursor)
     cursor.execute("""
         SELECT a.id, a.doctor_email, a.athlete_email, a.athlete_name, a.athlete_phone,
                CAST(a.date AS CHAR) as date, 

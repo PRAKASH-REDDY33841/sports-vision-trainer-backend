@@ -1,3 +1,7 @@
+databases:
+  - name: sports-vision-db
+    plan: free
+
 services:
   - type: web
     name: sports-vision-trainer-backend
@@ -6,14 +10,10 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn -w 4 -k uvicorn.workers.UvicornWorker main:app --bind 0.0.0.0:$PORT
     envVars:
-      - key: DB_HOST
-        sync: false
-      - key: DB_USER
-        sync: false
-      - key: DB_PASSWORD
-        sync: false
-      - key: DB_NAME
-        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sports-vision-db
+          property: connectionString
       - key: BASE_URL
         sync: false
       - key: ALLOWED_ORIGINS

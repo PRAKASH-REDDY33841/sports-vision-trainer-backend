@@ -1,7 +1,7 @@
 fastapi
 uvicorn
 pydantic
-mysql-connector-python
+psycopg2-binary
 passlib[bcrypt]
 python-multipart
 python-dotenv
