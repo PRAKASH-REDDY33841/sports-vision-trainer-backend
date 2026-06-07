@@ -197,6 +197,33 @@ def on_startup():
     init_doctors_table()
     init_appointments_table()
 
+@app.get("/test_email_config")
+def test_email_config():
+    resend_key = os.getenv("RESEND_API_KEY")
+    resend_sender = os.getenv("RESEND_SENDER_EMAIL")
+    smtp_sender = os.getenv("SMTP_SENDER_EMAIL")
+    smtp_server = os.getenv("SMTP_SERVER")
+    smtp_port = os.getenv("SMTP_PORT")
+    
+    resend_status = "Not Set"
+    if resend_key:
+        resend_status = f"Set (Length: {len(resend_key)}, Starts with: {resend_key[:5]}...)" if len(resend_key) > 5 else "Set (Too Short)"
+        
+    return {
+        "status": "success",
+        "resend_config": {
+            "resend_api_key_configured": resend_key is not None and len(resend_key.strip()) > 0,
+            "resend_api_key_details": resend_status,
+            "resend_sender_email": resend_sender or "onboarding@resend.dev (default)"
+        },
+        "smtp_config": {
+            "smtp_sender_configured": smtp_sender is not None and len(smtp_sender.strip()) > 0,
+            "smtp_server": smtp_server or "smtp.gmail.com (default)",
+            "smtp_port": smtp_port or "587 (default)"
+        },
+        "note": "Standard SMTP is blocked on Render Free Tier. You MUST configure a valid RESEND_API_KEY in Render dashboard environment variables."
+    }
+
 @app.post("/register")
 def register(req: RegisterRequest):
     try:
