@@ -711,7 +711,7 @@ def get_doctor_appointments(email: str):
     cursor = db.cursor(cursor_factory=extras.RealDictCursor)
     cursor.execute("""
         SELECT id, doctor_email, athlete_email, athlete_name, athlete_phone,
-               CAST(date AS CHAR) as date, CAST(time AS CHAR) as time, status 
+               CAST(date AS VARCHAR) as date, CAST(time AS VARCHAR) as time, status 
         FROM appointments WHERE doctor_email=%s AND status='PENDING'
     """, (email,))
     return {"status": "success", "appointments": cursor.fetchall()}
@@ -723,7 +723,7 @@ def get_door_history(email: str, request: Request):
     cursor = db.cursor(cursor_factory=extras.RealDictCursor)
     cursor.execute("""
         SELECT a.id, a.doctor_email, a.athlete_email, a.athlete_name, a.athlete_phone,
-               CAST(a.date AS CHAR) as date, CAST(a.time AS CHAR) as time, a.status,
+               CAST(a.date AS VARCHAR) as date, CAST(a.time AS VARCHAR) as time, a.status,
                u.profile_image
         FROM appointments a
         LEFT JOIN users u ON a.athlete_email = u.email
@@ -781,7 +781,7 @@ def get_accepted_appointments(email: str, request: Request):
     cursor = db.cursor(cursor_factory=extras.RealDictCursor)
     cursor.execute("""
         SELECT a.id, a.doctor_email, a.athlete_email, a.athlete_name, a.athlete_phone,
-               CAST(a.date AS CHAR) as date, CAST(a.time AS CHAR) as time, a.status,
+               CAST(a.date AS VARCHAR) as date, CAST(a.time AS VARCHAR) as time, a.status,
                u.profile_image
         FROM appointments a
         LEFT JOIN users u ON a.athlete_email = u.email
@@ -804,8 +804,8 @@ def get_athlete_bookings(email: str):
     cursor = db.cursor(cursor_factory=extras.RealDictCursor)
     cursor.execute("""
         SELECT a.id, a.doctor_email, a.athlete_email, a.athlete_name, a.athlete_phone,
-               CAST(a.date AS CHAR) as date, 
-               CAST(a.time AS CHAR) as time,
+               CAST(a.date AS VARCHAR) as date, 
+               CAST(a.time AS VARCHAR) as time,
                a.status, d.full_name as doctor_name 
         FROM appointments a
         LEFT JOIN doctors d ON a.doctor_email = d.clinic_email
