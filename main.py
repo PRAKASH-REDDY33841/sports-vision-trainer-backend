@@ -41,16 +41,60 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # ---------------- EMAIL FUNCTION ----------------
 def send_email_otp(to_email, otp):
+    subject = "Password Reset OTP"
+    body = f"Your OTP is: {otp}"
+
+    # Check if Resend API is configured (recommended for Render Free Tier)
+    resend_api_key = os.getenv("RESEND_API_KEY")
+    if resend_api_key:
+        import json
+        import urllib.request
+        import urllib.error
+
+        url = "https://api.resend.com/emails"
+        from_email = os.getenv("RESEND_SENDER_EMAIL", "onboarding@resend.dev")
+
+        headers = {
+            "Authorization": f"Bearer {resend_api_key}",
+            "Content-Type": "application/json",
+            "User-Agent": "sports-vision-trainer-backend/1.0"
+        }
+
+        payload = {
+            "from": from_email,
+            "to": [to_email],
+            "subject": subject,
+            "html": f"<p>{body}</p>"
+        }
+
+        try:
+            req = urllib.request.Request(
+                url, 
+                data=json.dumps(payload).encode("utf-8"), 
+                headers=headers, 
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=10) as response:
+                return True, "Success"
+        except urllib.error.HTTPError as e:
+            error_info = e.read().decode("utf-8")
+            try:
+                err_json = json.loads(error_info)
+                msg = err_json.get("message", error_info)
+            except Exception:
+                msg = error_info
+            return False, f"Resend API Error: {msg}"
+        except Exception as e:
+            return False, f"Resend Connection Error: {str(e)}"
+
+    # Fallback to standard SMTP
     sender_email = os.getenv("SMTP_SENDER_EMAIL")
     sender_password = os.getenv("SMTP_SENDER_PASSWORD")
     smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
     smtp_port = int(os.getenv("SMTP_PORT", "587"))
 
     if not sender_email or not sender_password:
-        return False, "SMTP credentials (SMTP_SENDER_EMAIL and SMTP_SENDER_PASSWORD) are not configured in backend Environment Variables."
-
-    subject = "Password Reset OTP"
-    body = f"Your OTP is: {otp}"
+        return False, "Email sending failed. On Render Free Tier, standard SMTP ports (587, 465) are blocked. Please set 'RESEND_API_KEY' in Render environment variables to send emails via HTTP API for free."
 
     msg = MIMEText(body)
     msg["Subject"] = subject
