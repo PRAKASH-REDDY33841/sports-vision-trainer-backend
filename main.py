@@ -156,6 +156,8 @@ def register(req: RegisterRequest):
         db = get_db()
         cursor = db.cursor(cursor_factory=extras.RealDictCursor)
 
+        req.email = req.email.strip().lower()
+
         if req.username == "" or req.email == "" or req.password == "":
             return {
                 "status": "error",
@@ -190,6 +192,8 @@ def register(req: RegisterRequest):
 def login(req: LoginRequest):
     db = get_db()
     cursor = db.cursor(cursor_factory=extras.RealDictCursor)
+
+    req.email = req.email.strip().lower()
 
     if req.email == "" or req.password == "":
         return {
@@ -303,6 +307,8 @@ def get_profile(email: str):
     db = get_db()
     cursor = db.cursor(cursor_factory=extras.RealDictCursor)
 
+    email = email.strip().lower()
+
     cursor.execute(
         "SELECT username,bio,profile_image FROM users WHERE email=%s",
         (email,)
@@ -325,6 +331,7 @@ async def save_profile(
 ):
     db = get_db()
     cursor = db.cursor()
+    email = email.strip().lower()
 
     image_path = None
 
@@ -359,6 +366,8 @@ def save_session(req: SessionSaveRequest):
     db = get_db()
     cursor = db.cursor(cursor_factory=extras.RealDictCursor)
 
+    req.email = req.email.strip().lower()
+
     cursor.execute(
         "INSERT INTO game_sessions (email, game_type, score, avg_reaction, wrong, timestamp) VALUES (%s, %s, %s, %s, %s, %s)",
         (req.email, req.gameType, req.score, req.avgReaction, req.wrong, req.timestamp)
@@ -373,6 +382,8 @@ def save_session(req: SessionSaveRequest):
 def get_sessions(email: str):
     db = get_db()
     cursor = db.cursor(cursor_factory=extras.RealDictCursor)
+
+    email = email.strip().lower()
 
     cursor.execute(
         "SELECT game_type as gameType, score, avg_reaction as avgReaction, wrong, timestamp FROM game_sessions WHERE email=%s ORDER BY timestamp ASC",
@@ -400,6 +411,8 @@ def doctor_register(req: DoctorRegisterRequest):
         db = get_db()
         cursor = db.cursor(cursor_factory=extras.RealDictCursor)
 
+        req.clinic_email = req.clinic_email.strip().lower()
+
         if not req.full_name or not req.clinic_email or not req.password:
             return {"status": "error", "message": "Missing fields"}
 
@@ -425,6 +438,8 @@ def doctor_register(req: DoctorRegisterRequest):
 def doctor_login(req: DoctorLoginRequest):
     db = get_db()
     cursor = db.cursor(cursor_factory=extras.RealDictCursor)
+
+    req.clinic_email = req.clinic_email.strip().lower()
 
     if not req.clinic_email or not req.password:
         return {"status": "error", "message": "Missing credentials"}
@@ -522,6 +537,8 @@ def get_doctor_profile(email: str):
     db = get_db()
     cursor = db.cursor(cursor_factory=extras.RealDictCursor)
 
+    email = email.strip().lower()
+
     cursor.execute(
         "SELECT full_name as username, bio, profile_image FROM doctors WHERE clinic_email=%s",
         (email,)
@@ -544,6 +561,7 @@ async def save_doctor_profile(
 ):
     db = get_db()
     cursor = db.cursor()
+    email = email.strip().lower()
 
     image_path = None
 
