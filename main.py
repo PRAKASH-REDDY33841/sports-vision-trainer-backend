@@ -154,7 +154,7 @@ def on_startup():
 def register(req: RegisterRequest):
     try:
         db = get_db()
-    cursor = db.cursor(cursor_factory=extras.RealDictCursor)
+        cursor = db.cursor(cursor_factory=extras.RealDictCursor)
 
         if req.username == "" or req.email == "" or req.password == "":
             return {
@@ -393,7 +393,7 @@ def get_sessions(email: str):
 def doctor_register(req: DoctorRegisterRequest):
     try:
         db = get_db()
-    cursor = db.cursor(cursor_factory=extras.RealDictCursor)
+        cursor = db.cursor(cursor_factory=extras.RealDictCursor)
 
         if not req.full_name or not req.clinic_email or not req.password:
             return {"status": "error", "message": "Missing fields"}
