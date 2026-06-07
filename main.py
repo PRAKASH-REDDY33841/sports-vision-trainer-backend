@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, Request
 from schemas import *
 from database import get_db
 from auth import hash_password, verify_password
@@ -377,7 +377,7 @@ def reset_password(req: ResetRequest):
 
 # ---------------- GET PROFILE ----------------
 @app.get("/get_profile")
-def get_profile(email: str):
+def get_profile(email: str, request: Request):
     db = get_db()
     cursor = db.cursor(cursor_factory=extras.RealDictCursor)
 
@@ -390,7 +390,8 @@ def get_profile(email: str):
     user = cursor.fetchone()
 
     if user and user["profile_image"]:
-        user["profile_image"] = f"{BASE_URL}/{user['profile_image']}"
+        base_url = str(request.base_url).rstrip('/')
+        user["profile_image"] = f"{base_url}/{user['profile_image']}"
 
     return user
 
@@ -607,7 +608,7 @@ def doctor_reset_password(req: ResetRequest):
 
 # ---------------- GET DOCTOR PROFILE ----------------
 @app.get("/get_doctor_profile")
-def get_doctor_profile(email: str):
+def get_doctor_profile(email: str, request: Request):
     db = get_db()
     cursor = db.cursor(cursor_factory=extras.RealDictCursor)
 
@@ -620,7 +621,8 @@ def get_doctor_profile(email: str):
     doctor = cursor.fetchone()
 
     if doctor and doctor["profile_image"]:
-        doctor["profile_image"] = f"{BASE_URL}/{doctor['profile_image']}"
+        base_url = str(request.base_url).rstrip('/')
+        doctor["profile_image"] = f"{base_url}/{doctor['profile_image']}"
 
     return doctor
 
@@ -665,15 +667,16 @@ async def save_doctor_profile(
 
 # ---------------- GET DOCTORS ----------------
 @app.get("/get_doctors")
-def get_doctors():
+def get_doctors(request: Request):
     db = get_db()
     cursor = db.cursor(cursor_factory=extras.RealDictCursor)
     cursor.execute("SELECT full_name, medical_license, hospital_name, clinic_email, profile_image FROM doctors")
     doctors = cursor.fetchall()
 
+    base_url = str(request.base_url).rstrip('/')
     for doctor in doctors:
         if doctor.get("profile_image"):
-            doctor["profile_image"] = f"{BASE_URL}/{doctor['profile_image']}"
+            doctor["profile_image"] = f"{base_url}/{doctor['profile_image']}"
         else:
             doctor["profile_image"] = None
 
@@ -709,19 +712,26 @@ def get_doctor_appointments(email: str):
 
 # ---------------- GET DOCTOR HISTORY ----------------
 @app.get("/get_doctor_history")
-def get_door_history(email: str):
+def get_door_history(email: str, request: Request):
     db = get_db()
     cursor = db.cursor(cursor_factory=extras.RealDictCursor)
-    cursor.execute(f"""
+    cursor.execute("""
         SELECT a.id, a.doctor_email, a.athlete_email, a.athlete_name, a.athlete_phone,
                CAST(a.date AS CHAR) as date, CAST(a.time AS CHAR) as time, a.status,
-               CONCAT('{BASE_URL}/', u.profile_image) as profile_image
+               u.profile_image
         FROM appointments a
         LEFT JOIN users u ON a.athlete_email = u.email
         WHERE a.doctor_email=%s AND a.status IN ('ACCEPTED', 'REJECTED', 'CANCELLED')
         ORDER BY a.id DESC
     """, (email,))
-    return {"status": "success", "appointments": cursor.fetchall()}
+    rows = cursor.fetchall()
+    base_url = str(request.base_url).rstrip('/')
+    for row in rows:
+        if row.get("profile_image"):
+            row["profile_image"] = f"{base_url}/{row['profile_image']}"
+        else:
+            row["profile_image"] = None
+    return {"status": "success", "appointments": rows}
 
 # ---------------- UPDATE APPOINTMENT STATUS ----------------
 @app.post("/update_appointment_status")
@@ -760,19 +770,26 @@ def get_athlete_notifications(email: str):
 
 # ---------------- GET ACCEPTED APPOINTMENTS ----------------
 @app.get("/get_accepted_appointments")
-def get_accepted_appointments(email: str):
+def get_accepted_appointments(email: str, request: Request):
     db = get_db()
     cursor = db.cursor(cursor_factory=extras.RealDictCursor)
-    cursor.execute(f"""
+    cursor.execute("""
         SELECT a.id, a.doctor_email, a.athlete_email, a.athlete_name, a.athlete_phone,
                CAST(a.date AS CHAR) as date, CAST(a.time AS CHAR) as time, a.status,
-               CONCAT('{BASE_URL}/', u.profile_image) as profile_image
+               u.profile_image
         FROM appointments a
         LEFT JOIN users u ON a.athlete_email = u.email
         WHERE a.doctor_email=%s AND a.status='ACCEPTED'
         ORDER BY a.date ASC, a.time ASC
     """, (email,))
-    return {"status": "success", "appointments": cursor.fetchall()}
+    rows = cursor.fetchall()
+    base_url = str(request.base_url).rstrip('/')
+    for row in rows:
+        if row.get("profile_image"):
+            row["profile_image"] = f"{base_url}/{row['profile_image']}"
+        else:
+            row["profile_image"] = None
+    return {"status": "success", "appointments": rows}
 
 # ---------------- GET ATHLETE BOOKINGS ----------------
 @app.get("/get_athlete_bookings")
